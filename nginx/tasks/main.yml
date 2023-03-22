@@ -1,0 +1,101 @@
+---
+  - name: proof
+    ping:
+
+  - name: Install NGINX with yum
+    ansible.builtin.yum:
+      name:
+        - nginx
+      state: latest
+
+  - name: add common sites-enabled / sites-available folder
+    ansible.builtin.file:
+      path: "{{ item }}"
+      state: directory
+      owner: root
+      group: root
+      mode: 0644
+    loop:
+      - /etc/nginx/sites-available
+      - /etc/nginx/sites-enabled
+
+  - name: add sites-enabled into nginx.conf
+    ansible.builtin.lineinfile:
+      dest: /etc/nginx/nginx.conf
+      insertbefore: '# Settings for a TLS enabled server'
+      line: "include /etc/nginx/sites-enabled/*;"
+      state: present
+
+  - name: redirect unknown urls to something
+    ansible.builtin.lineinfile:
+      dest: /etc/nginx/nginx.conf
+      regexp: '^ *server_name  _;'
+      line: "        server_name  _;\n        rewrite ^/(.*)$ https://wikipedia.org/ permanent;"
+      state: present
+  
+  - name: create the www folder
+    ansible.builtin.file:
+      path: /web/demopage/html
+      state: directory
+      owner: nginx
+      group: nginx
+      mode: 0755
+      recurse: yes
+
+  - name: copy the demopage html file
+    ansible.builtin.template:
+      src: index.html
+      dest: /web/demopage/html/index.html
+      owner: nginx
+      group: nginx
+      mode: 
+      
+  - name: copy config for the demopage
+    ansible.builtin.template:
+      src: demopage.conf
+      dest: /etc/nginx/sites-available/demopage.conf
+      owner: root
+      group: root
+      mode: 0644
+
+  - name: link the demopage
+    ansible.builtin.file:
+      src: /etc/nginx/sites-available/demopage.conf
+      dest: /etc/nginx/sites-enabled/demopage.conf
+      state: link
+  
+  - name: Make sure Nginx starts up automatically
+    service:
+      name: nginx
+      state: restarted
+      enabled: yes
+  
+  - name: Allow nginx to read files (selinux)
+    sefcontext:
+      target: '/web(/.*)?'
+      setype: httpd_sys_content_t
+      state: present
+
+  - name: Apply new SELinux file context to filesystem
+    command: restorecon -iRv /web/
+
+  - name: allow firewall access to the webserver
+    ansible.posix.firewalld:
+      port: " {{ item }}"
+      permanent: true
+      state: enabled
+    loop:
+      - 80/tcp
+      - 443/tcp
+
+  - name: reload service firewalld
+    systemd:
+      name: firewalld
+      state: restarted
+
+    
+
+  
+
+
+    
